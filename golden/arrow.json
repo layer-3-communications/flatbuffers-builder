@@ -1,0 +1,27 @@
+{
+  endianness: "Little",
+  fields: [
+    {
+      name: "recently_added_post",
+      nullable: true,
+      type_type: "Bool",
+      type: {
+      },
+      children: [
+
+      ]
+    },
+    {
+      name: "likes",
+      nullable: true,
+      type_type: "Int",
+      type: {
+        bitWidth: 64,
+        is_signed: true
+      },
+      children: [
+
+      ]
+    }
+  ]
+}

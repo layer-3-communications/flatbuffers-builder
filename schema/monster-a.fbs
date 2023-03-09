@@ -1,0 +1,8 @@
+namespace MyGame.Sample;
+ 
+table Monster {
+  mana:short;
+  health:short;
+}
+ 
+root_type Monster;

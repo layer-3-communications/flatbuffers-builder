@@ -121,11 +121,15 @@ data Union = Union
 
 data Array
   = ArrayPrimitive -- to keep this simple, these are pre-serialized
-      !Int -- number of elements (not the same as the length of the byte array)
+      !Int
+        -- ^ Number of elements, not the same as the length of the byte array.
+        -- This number multiplied by the element size should equal the length
+        -- of the byte array.
       !ByteArray
   | ArrayObject !(SmallArray Object)
   | ArrayArray !(SmallArray Array)
 
+-- Internal type. Not exported.
 data Section
   = SectionBoxedArray
       !(PrimArray Id) -- pointers to tables

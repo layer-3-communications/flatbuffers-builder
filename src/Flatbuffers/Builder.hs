@@ -44,90 +44,112 @@ import qualified Data.Primitive.ByteArray.LittleEndian as LE
 import qualified Data.Primitive.Contiguous as C
 import qualified GHC.Exts as Exts
 
-boolean :: Bool -> Field
-boolean !b = FieldPrimitive $ runByteArrayST $ do
-  dst <- PM.newByteArray 1
-  LE.writeByteArray dst 0 (if b then 0x01 :: Word8 else 0x00 :: Word8)
-  PM.unsafeFreezeByteArray dst
-
+-- Not exported
 singletonByteArray :: Word8 -> ByteArray
 singletonByteArray !w = runByteArrayST $ do
   dst <- PM.newByteArray 1
   PM.writeByteArray dst 0 w
   PM.unsafeFreezeByteArray dst
 
+-- | Encode a boolean as a field.
+boolean :: Bool -> Field
+boolean !b = FieldPrimitive $ runByteArrayST $ do
+  dst <- PM.newByteArray 1
+  LE.writeByteArray dst 0 (if b then 0x01 :: Word8 else 0x00 :: Word8)
+  PM.unsafeFreezeByteArray dst
+
+-- | Encode a 16-bit unsigned word as a field.
 unsigned16 :: Word16 -> Field
 unsigned16 !w = FieldPrimitive $ runByteArrayST $ do
   dst <- PM.newByteArray 2
   LE.writeByteArray dst 0 w
   PM.unsafeFreezeByteArray dst
 
+-- | Encode a 32-bit signed word as a field.
 signed32 :: Int32 -> Field
 signed32 !w = FieldPrimitive $ runByteArrayST $ do
   dst <- PM.newByteArray 4
   LE.writeByteArray dst 0 w
   PM.unsafeFreezeByteArray dst
 
+-- | Encode a 64-bit signed word as a field.
 signed64 :: Int64 -> Field
 signed64 !w = FieldPrimitive $ runByteArrayST $ do
   dst <- PM.newByteArray 8
   LE.writeByteArray dst 0 w
   PM.unsafeFreezeByteArray dst
 
+-- | Encode text as a field.
 text :: Text -> Field
 text = FieldString
 
+-- | Use a tagged union as a field.
 union :: Union -> Field 
 union = FieldUnion
 
+-- | Use an array of objects as a field.
 objects :: SmallArray Object -> Field
 objects = FieldArray . ArrayObject
 
+-- | Use an array of objects as a field.
 structs ::
      Int -- numbers of structs
   -> ByteArray -- pre-serialized structs
   -> Field 
 structs !n = FieldArray . ArrayPrimitive n
 
+-- | Indicates that a field is missing.
 absent :: Field
 absent = FieldAbsent
 
 data Field
   = FieldAbsent
+    -- ^ Indicates that the field is missing.
   | FieldPrimitive 
-      -- ^ Fixed-width, primitive type. Alignment is inferred from
-      -- the length of the payload. Alignments based on length:
-      -- * 1: 1
-      -- * 2: 2
-      -- * 3: 4
-      -- * 4: 4
-      -- * 5: 8
-      -- * 6: 8
-      -- * 7: 8
-      -- * 8: 8
-      -- * 8+: 8
-      !ByteArray
+    -- ^ Fixed-width, primitive type. Alignment is inferred from
+    -- the length of the payload. Alignments based on length:
+    -- 
+    -- * 1: 1
+    -- * 2: 2
+    -- * 3: 4
+    -- * 4: 4
+    -- * 5: 8
+    -- * 6: 8
+    -- * 7: 8
+    -- * 8+: 8
+    !ByteArray
   | FieldUnion !Union
   | FieldArray !Array
   | FieldObject !Object
   | FieldString {-# UNPACK #-} !Text
 
+-- | An object
 newtype Object = Object (SmallArray Field)
-  
+
+-- | A tagged union
 data Union = Union
   { tag :: !Word8
   , object :: !Object
   }
 
+-- | An array. Flatbuffers serializes arrays of objects differently
+-- from arrays of primitive values, but this library lumps all of these
+-- together anyway.
+--
+-- This type might need to have an @ArrayArray@ data constructor as well,
+-- but this is not needed at the moment. Open an issue on the issue tracker
+-- if this is important.
 data Array
-  = ArrayPrimitive -- to keep this simple, these are pre-serialized
+  = ArrayPrimitive 
       !Int
         -- ^ Number of elements, not the same as the length of the byte array.
         -- This number multiplied by the element size should equal the length
         -- of the byte array.
+        --
+        -- To keep this simple, these are pre-serialized. This lets the library
+        -- avoid picking up dependencies on any array libraries (beyond @primitive@).
       !ByteArray
   | ArrayObject !(SmallArray Object)
-  | ArrayArray !(SmallArray Array)
 
 -- Internal type. Not exported.
 data Section
@@ -196,7 +218,7 @@ data Acc = Acc
   !Builder -- everything encoded so far, len(bldr) = total
   !(IntMap Int) -- how many bytes away is each section from the end
 
--- | Encode a root object.
+-- | Encode a root object as a catenable builder.
 encode :: Object -> Builder
 encode obj =
   -- Implementation note: We take advantage of the fact that tables cannot
@@ -206,7 +228,7 @@ encode obj =
   -- them at the end.
   -- Also, the root object always gets ID 0.
   let M f = encodeObject obj
-      R sections _ rootTableId = f IntMap.empty 0
+      R sections _ _ = f IntMap.empty 0
       Acc _ result _ = IntMap.foldrWithKey'
         (\sectionId section (Acc total bldr distances) ->
           let bytes = encodeSectionToBytes distances total section
@@ -338,7 +360,6 @@ encodeArray = \case
     arrId <- freshId
     push arrId (SectionPrimitiveArray count payload)
     pure arrId
-    
 
 encodeString :: Text -> M Id
 encodeString !str = do
